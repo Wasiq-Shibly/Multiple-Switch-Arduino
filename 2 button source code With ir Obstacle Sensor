@@ -1,0 +1,123 @@
+
+#define Sw1Pin    8
+#define Sw2Pin    9
+int c=0;
+
+class Button {
+ private:
+  const int DEBOUNCE = 200;      // the number of mSeconds for debounce counter
+  const int HOLD_COUNT = 5000;   // mSeconds for hold counter
+  int sw1State = NOBUTTON_PRESSED, SwPin=0;
+  int oldSwState=-1;
+  int oldReadSw=0, mSecCounter=0;
+
+ // Define Button States
+ public:
+ typedef enum SW_STATES{
+  NOBUTTON_PRESSED,
+  BUTTON_DEBOUNCE,
+  BUTTON_PRESSED,
+  BUTTON_HOLD
+ };
+
+ Button(int sw)   { SwPin = sw; }        // constructor
+
+ int swState(void) { return sw1State; }  // return state
+
+ // switch call back function - state machine for button
+ void buttonCallBack(void)
+ {
+    int readSw = digitalRead(SwPin);   // read the switch button
+    if(readSw == 1)                     // if button not pressed
+          sw1State = NOBUTTON_PRESSED;  // current state not pressede
+    else
+      switch(sw1State)                  // switch on current state
+      {
+       case NOBUTTON_PRESSED:     
+            sw1State = BUTTON_DEBOUNCE;         // in debounce
+            oldReadSw=readSw;
+            mSecCounter=0;
+            break;
+       case BUTTON_DEBOUNCE:
+            if (mSecCounter++ > DEBOUNCE)
+                sw1State = BUTTON_PRESSED;    // Button still Pressed
+            break;
+       case BUTTON_PRESSED:
+            if (mSecCounter++ > HOLD_COUNT)
+                sw1State = BUTTON_HOLD;       // Button in hold
+            break;
+       case BUTTON_HOLD:
+            break;
+      }
+ }
+
+ // if switch has changed state print its state
+ void swPrint(void)
+ {
+    char text[20];
+    String s(itoa( SwPin, text, 10));
+    if (oldSwState != sw1State)
+    {
+      oldSwState = sw1State;
+      switch(oldSwState)
+      {
+        case NOBUTTON_PRESSED: Serial.println("BUTTON_" + s + "_NOT_PRESSED"); break;
+        case BUTTON_DEBOUNCE: Serial.println("BUTTON_" + s + "_DEBOUNCE " ); break;
+        case BUTTON_PRESSED: 
+        {
+          Serial.println("BUTTON_" + s + "_PRESSED");
+          if(s=="8")
+          {
+          c++;
+          }
+          else
+          {
+            c--;
+          }
+          Serial.println(c); 
+          break;
+        }
+        case BUTTON_HOLD: Serial.println("BUTTON_" + s + "_HOLD"); break;
+      }
+    }
+ }
+};
+
+// define the buttons
+Button button1(Sw1Pin);
+Button button2(Sw2Pin);
+
+// Timer 0 Interrupt is called once a millisecond
+volatile int second=0 ;                    // counts up to 1000 for a second
+SIGNAL(TIMER0_COMPA_vect) {
+  button1.buttonCallBack();
+  button2.buttonCallBack();
+  second++;    // increment second counter
+}
+
+// the setup routine runs once when you press reset:
+void setup() {               
+    Serial.begin(115200);
+    Serial.println("DMU shield timer test\n");   
+    // Timer0 is already used for millis()
+    // set up  "TIMER0_COMPA_vect" interrupt function
+    OCR0A = 0xAF;
+    TIMSK0 |= _BV(OCIE0A);}
+
+// print * every second # every five seconds
+void loop()
+{
+    button1.swPrint();        // if button state changed print new state
+    button2.swPrint();
+    if(second>1000)           // if second elapsed print state
+      {
+        second=0;
+        if(button1.swState() == Button::SW_STATES::BUTTON_PRESSED)Serial.print("P");
+        else
+          if(button1.swState() == Button::SW_STATES::BUTTON_HOLD)Serial.print("H");
+          //else Serial.print("*");
+        if(button2.swState() == Button::SW_STATES::BUTTON_PRESSED)Serial.print("X");
+        else
+          if(button2.swState() == Button::SW_STATES::BUTTON_HOLD)Serial.print("Z");
+      }
+}
